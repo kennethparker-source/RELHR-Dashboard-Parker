@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RELHR Real Estate Release Dashboard</title>
+  <!--
+    SETUP INSTRUCTIONS FOR GITHUB PAGES
+    ====================================
+    1. Create a GitHub repository (e.g. "relhr-dashboard")
+    2. Upload THIS file as "index.html" to the repository
+    3. Upload "MIKHRRallprojectsKP1784902151131.csv" to the SAME folder
+    4. Go to Settings > Pages > Source: Deploy from main branch
+    5. Your dashboard will be live at https://[username].github.io/[reponame]/
+
+    NOTE: Opening this file directly from your desktop (file://) will NOT work.
+          It must be served over HTTP — GitHub Pages handles this automatically.
+  -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    :root {
+      --bg:       #0d1117;
+      --card:     #161b22;
+      --border:   #30363d;
+      --text:     #e6edf3;
+      --muted:    #8b949e;
+      --accent:   #cd0000;
+      --green:    #3fb950;
+      --yellow:   #d29922;
+      --red:      #f85149;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────────── */
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .header-logo {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+    .header-title { font-size: 1.15rem; font-weight: 700; }
+    .header-sub   { font-size: 0.78rem; color: var(--muted); margin-top: 1px; }
+    .header-date  { font-size: 0.8rem; color: var(--muted); text-align: right; }
+
+    /* ── Layout ────────────────────────────────────────────────────────── */
+    .container { max-width: 1680px; margin: 0 auto; padding: 20px 24px; }
+
+    /* ── KPI Cards ─────────────────────────────────────────────────────── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .kpi-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+    }
+    .kpi-card.accent-left { border-left: 3px solid var(--accent); }
+    .kpi-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin-bottom: 8px; }
+    .kpi-value { font-size: 2.2rem; font-weight: 700; line-height: 1; }
+    .kpi-value.c-white  { color: var(--text); }
+    .kpi-value.c-green  { color: var(--green); }
+    .kpi-value.c-yellow { color: var(--yellow); }
+    .kpi-value.c-red    { color: var(--red); }
+    .kpi-sub { font-size: 0.75rem; color: var(--muted); margin-top: 5px; }
+
+    /* ── Main two-panel row ─────────────────────────────────────────────── */
+    .main-row {
+      display: grid;
+      grid-template-columns: 1fr 440px;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .panel-header .panel-title { color: var(--text); }
+
+    /* Map */
+    #map { height: 430px; }
+
+    /* Chart */
+    .chart-outer { display: flex; flex-direction: column; }
+    .chart-inner { padding: 14px 16px; flex: 1; }
+    #releaseChart { max-height: 370px; }
+
+    /* Year buttons */
+    .year-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+    .yr-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 3px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: all 0.12s;
+    }
+    .yr-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .yr-btn:hover:not(.active) { border-color: var(--accent); color: var(--text); }
+
+    /* ── Table section ──────────────────────────────────────────────────── */
+    .table-section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .table-filters {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .fi {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 5px;
+      font-size: 0.82rem;
+      outline: none;
+      transition: border-color 0.12s;
+    }
+    .fi:focus { border-color: var(--accent); }
+    .fi::placeholder { color: var(--muted); }
+    #searchInput { width: 240px; }
+    select.fi { cursor: pointer; }
+
+    .table-wrap { overflow-x: auto; max-height: 460px; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+
+    thead th {
+      background: #0d1117;
+      padding: 9px 12px;
+      text-align: left;
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+      z-index: 2;
+    }
+    thead th:hover { color: var(--text); }
+    thead th.sorted { color: var(--accent); }
+    .sort-arrow { margin-left: 4px; opacity: 0.4; font-size: 0.7rem; }
+    thead th.sorted .sort-arrow { opacity: 1; }
+
+    tbody tr { border-bottom: 1px solid #21262d; transition: background 0.1s; }
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+    tbody td { padding: 9px 12px; vertical-align: middle; }
+
+    /* Status badge */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    .badge.released { background: rgba(63,185,80,0.12); color: #3fb950; border: 1px solid rgba(63,185,80,0.3); }
+    .badge.behind   { background: rgba(248,81,73,0.12); color: #f85149; border: 1px solid rgba(248,81,73,0.3); }
+    .badge.pending  { background: rgba(210,153,34,0.12); color: #d29922; border: 1px solid rgba(210,153,34,0.3); }
+    .badge.no-date  { background: rgba(139,148,158,0.08); color: var(--muted); border: 1px solid var(--border); }
+
+    /* Priority */
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    .dot.high   { background: var(--accent); }
+    .dot.normal { background: var(--muted); opacity: 0.5; }
+
+    /* Date cells */
+    .dc { white-space: nowrap; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.79rem; color: var(--muted); }
+    .dc.actual { color: var(--green); }
+
+    .site-name { font-weight: 600; }
+    .site-sub  { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
+    #rowCount { font-size: 0.78rem; color: var(--muted); }
+
+    /* Leaflet dark overrides */
+    .leaflet-popup-content-wrapper {
+      background: #1c2128;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    .leaflet-popup-tip { background: #1c2128; }
+    .leaflet-popup-content { margin: 12px 16px; }
+    .popup-name { font-weight: 700; font-size: 0.88rem; margin-bottom: 7px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .popup-row { font-size: 0.78rem; color: var(--muted); margin-bottom: 3px; }
+    .popup-row b { color: var(--text); font-weight: 500; }
+
+    /* Loading / error states */
+    .loading { display: flex; align-items: center; justify-content: center; height: 140px; color: var(--muted); gap: 10px; }
+    .spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.75s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-msg { color: var(--red); padding: 16px; }
+
+    .no-results { text-align: center; padding: 36px; color: var(--muted); }
+
+    /* Legend dots in header */
+    .legend { display: flex; gap: 14px; font-size: 0.76rem; }
+    .legend-item { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .main-row { grid-template-columns: 1fr; }
+      #map { height: 380px; }
+    }
+    @media (max-width: 768px) {
+      .kpi-row { grid-template-columns: 1fr 1fr; }
+      .container { padding: 14px 14px; }
+      #searchInput { width: 180px; }
+    }
+    @media (max-width: 480px) {
+      .kpi-row { grid-template-columns: 1fr; }
+      .header-title { font-size: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="header-logo">RELHR</div>
+    <div>
+      <div class="header-title">Real Estate Release Dashboard</div>
+      <div class="header-sub">MIK Region — Parker Kenneth Portfolio</div>
+    </div>
+  </div>
+  <div class="header-date" id="headerDate"></div>
+</header>
+
+<div class="container">
+
+  <!-- KPI Cards -->
+  <div class="kpi-row" id="kpiRow">
+    <div class="kpi-card"><div class="loading"><div class="spinner"></div>Loading…</div></div>
+  </div>
+
+  <!-- Map + Chart -->
+  <div class="main-row">
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Site Locations</span>
+        <div class="legend">
+          <span class="legend-item"><span class="dot high" style="background:#3fb950;opacity:1;"></span>Released</span>
+          <span class="legend-item"><span class="dot high" style="background:#d29922;opacity:1;"></span>Pending</span>
+          <span class="legend-item"><span class="dot high" style="background:#f85149;opacity:1;"></span>Behind</span>
+          <span class="legend-item"><span class="dot high" style="background:#8b949e;opacity:1;"></span>No Date</span>
+        </div>
+      </div>
+      <div id="map"></div>
+    </div>
+
+    <div class="panel chart-outer">
+      <div class="panel-header">
+        <span class="panel-title">Releases by Month</span>
+        <div class="year-btns" id="yearBtns"></div>
+      </div>
+      <div class="chart-inner">
+        <canvas id="releaseChart"></canvas>
+      </div>
+    </div>
+
+  </div><!-- /.main-row -->
+
+  <!-- Table -->
+  <div class="table-section">
+    <div class="panel-header">
+      <span class="panel-title">All Projects</span>
+      <span id="rowCount"></span>
+    </div>
+    <div class="table-filters">
+      <input type="text" id="searchInput" class="fi" placeholder="Search site, city, state…">
+      <select id="fYear"   class="fi"><option value="">All Years</option></select>
+      <select id="fState"  class="fi"><option value="">All States</option></select>
+      <select id="fStatus" class="fi">
+        <option value="">All Statuses</option>
+        <option value="released">Released</option>
+        <option value="behind">Behind Schedule</option>
+        <option value="pending">Pending</option>
+        <option value="no-date">No Date</option>
+      </select>
+      <select id="fBuildType" class="fi"><option value="">All Build Types</option></select>
+      <select id="fPriority" class="fi">
+        <option value="">All Priorities</option>
+        <option value="high">Highest Priority</option>
+        <option value="normal">Normal</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th data-col="prioritySort">Pri <span class="sort-arrow">↕</span></th>
+            <th data-col="altName">Site Name <span class="sort-arrow">↕</span></th>
+            <th data-col="state">State <span class="sort-arrow">↕</span></th>
+            <th data-col="buildYear">Build Yr <span class="sort-arrow">↕</span></th>
+            <th data-col="buildType">Build Type <span class="sort-arrow">↕</span></th>
+            <th data-col="forecastDate">RE Released (F) <span class="sort-arrow">↕</span></th>
+            <th data-col="actualDate">RE Released (A) <span class="sort-arrow">↕</span></th>
+            <th data-col="releaseStatus">Status <span class="sort-arrow">↕</span></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr><td colspan="8"><div class="loading"><div class="spinner"></div>Loading data…</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /.container -->
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════
+// Config
+// ═══════════════════════════════════════════════════════════════
+const CSV_FILE = './MIKHRRallprojectsKP1784902151131.csv';
+
+const C = {
+  priority:    0,
+  altName:     2,
+  status:      3,
+  reRelF:      6,
+  buildYear:   7,
+  reRelA:      34,
+  buildTypeGL: 42,
+  batchRel:    141,
+  siteName:    184,
+  lat:         187,
+  lng:         188,
+  city:        190,
+  state:       191,
+};
+
+const STATUS_COLOR = {
+  released: '#3fb950',
+  pending:  '#d29922',
+  behind:   '#f85149',
+  'no-date':'#8b949e',
+};
+
+const STATUS_LABEL = {
+  released: 'Released',
+  pending:  'Pending',
+  behind:   'Behind',
+  'no-date':'No Date',
+};
+
+// ═══════════════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════════════
+const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+let allRows = [], filteredRows = [];
+let sortCol = 'forecastDate', sortDir = 1;
+let chartYear = 'All';
+let leafletMap = null, chartInst = null;
+let mapMarkers = [];
+
+// ═══════════════════════════════════════════════════════════════
+// Utilities
+// ═══════════════════════════════════════════════════════════════
+function parseDate(s) {
+  if (!s) return null;
+  s = s.trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const y = +m[3], mo = +m[1], d = +m[2];
+  if (y < 2020 || y > 2035) return null;
+  return new Date(y, mo - 1, d);
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function monthKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(k) {
+  const [y, m] = k.split('-');
+  return new Date(+y, +m - 1, 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+}
+
+function getStatus(raw) {
+  const actual   = parseDate(raw[C.reRelA]);
+  const forecast = parseDate(raw[C.reRelF]);
+  if (actual) return 'released';
+  if (!forecast) return 'no-date';
+  return forecast < TODAY ? 'behind' : 'pending';
+}
+
+function isHigh(r) { return r.raw[C.priority] && r.raw[C.priority].toLowerCase().includes('highest'); }
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Normalize row
+// ═══════════════════════════════════════════════════════════════
+function normalize(raw) {
+  const forecastDate = parseDate(raw[C.reRelF]);
+  const actualDate   = parseDate(raw[C.reRelA]);
+  const releaseStatus = getStatus(raw);
+  const lat = parseFloat(raw[C.lat]);
+  const lng = parseFloat(raw[C.lng]);
+  return {
+    raw,
+    altName:       (raw[C.altName]  || raw[C.siteName] || '(unnamed)').trim(),
+    buildYear:     (raw[C.buildYear] || '').trim(),
+    buildType:     (raw[C.buildTypeGL] || '').trim(),
+    state:         (raw[C.state]    || '').trim(),
+    city:          (raw[C.city]     || '').trim(),
+    batch:         (raw[C.batchRel] || '').trim(),
+    forecastDate,
+    actualDate,
+    releaseStatus,
+    prioritySort: isHigh({ raw }) ? 0 : 1,
+    lat: isNaN(lat) ? null : lat,
+    lng: isNaN(lng) ? null : lng,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// KPI Cards
+// ═══════════════════════════════════════════════════════════════
+function buildKPI(rows) {
+  const total    = rows.length;
+  const released = rows.filter(r => r.releaseStatus === 'released').length;
+  const behind   = rows.filter(r => r.releaseStatus === 'behind').length;
+  const pending  = rows.filter(r => r.releaseStatus === 'pending').length;
+  const pct      = total ? Math.round((released / total) * 100) : 0;
+
+  document.getElementById('kpiRow').innerHTML = `
+    <div class="kpi-card accent-left">
+      <div class="kpi-label">Total Projects</div>
+      <div class="kpi-value c-white">${total}</div>
+      <div class="kpi-sub">Active RELHR sites</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">RE Released</div>
+      <div class="kpi-value c-green">${released}</div>
+      <div class="kpi-sub">${pct}% complete</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Pending Release</div>
+      <div class="kpi-value c-yellow">${pending}</div>
+      <div class="kpi-sub">Future forecast date</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Behind Schedule</div>
+      <div class="kpi-value c-red">${behind}</div>
+      <div class="kpi-sub">Forecast date passed</div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Map
+// ═══════════════════════════════════════════════════════════════
+function buildMap(rows) {
+  if (!leafletMap) {
+    leafletMap = L.map('map', { preferCanvas: true }).setView([42.5, -84.5], 6);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 19,
+    }).addTo(leafletMap);
+  } else {
+    mapMarkers.forEach(m => leafletMap.removeLayer(m));
+    mapMarkers = [];
+  }
+
+  rows.filter(r => r.lat !== null && r.lng !== null).forEach(r => {
+    const color = STATUS_COLOR[r.releaseStatus];
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:11px;height:11px;border-radius:50%;background:${color};border:1.5px solid rgba(255,255,255,0.35);box-shadow:0 0 5px ${color}80;"></div>`,
+      iconSize: [11, 11],
+      iconAnchor: [5.5, 5.5],
+    });
+    const pop = `
+      <div class="popup-name">${esc(r.altName)}</div>
+      <div class="popup-row">Location: <b>${esc(r.city) || '—'}, ${esc(r.state) || '—'}</b></div>
+      <div class="popup-row">Build Type: <b>${esc(r.buildType) || '—'}</b></div>
+      <div class="popup-row">Build Year: <b>${esc(r.buildYear) || '—'}</b></div>
+      <div class="popup-row">RE Released (F): <b>${fmtDate(r.forecastDate)}</b></div>
+      <div class="popup-row">RE Released (A): <b style="color:${color}">${fmtDate(r.actualDate)}</b></div>
+      <div class="popup-row">Status: <b style="color:${color}">${STATUS_LABEL[r.releaseStatus]}</b></div>
+      ${r.batch ? `<div class="popup-row">Batch: <b>${esc(r.batch)}</b></div>` : ''}
+    `;
+    const marker = L.marker([r.lat, r.lng], { icon }).bindPopup(pop, { maxWidth: 240 });
+    marker.addTo(leafletMap);
+    mapMarkers.push(marker);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Chart
+// ═══════════════════════════════════════════════════════════════
+function buildChart(rows, year) {
+  const subset = year === 'All' ? rows : rows.filter(r => r.buildYear === year);
+
+  const fCounts = {}, aCounts = {};
+  subset.forEach(r => {
+    if (r.forecastDate) { const k = monthKey(r.forecastDate); fCounts[k] = (fCounts[k] || 0) + 1; }
+    if (r.actualDate)   { const k = monthKey(r.actualDate);   aCounts[k] = (aCounts[k] || 0) + 1; }
+  });
+
+  const keys   = [...new Set([...Object.keys(fCounts), ...Object.keys(aCounts)])].sort();
+  const labels = keys.map(monthLabel);
+  const fData  = keys.map(k => fCounts[k] || 0);
+  const aData  = keys.map(k => aCounts[k] || 0);
+
+  if (chartInst) {
+    chartInst.data.labels = labels;
+    chartInst.data.datasets[0].data = fData;
+    chartInst.data.datasets[1].data = aData;
+    chartInst.update();
+    return;
+  }
+
+  const ctx = document.getElementById('releaseChart').getContext('2d');
+  chartInst = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Forecast',
+          data: fData,
+          backgroundColor: 'rgba(210,153,34,0.65)',
+          borderColor: '#d29922',
+          borderWidth: 1,
+          borderRadius: 2,
+        },
+        {
+          label: 'Actual',
+          data: aData,
+          backgroundColor: 'rgba(63,185,80,0.65)',
+          borderColor: '#3fb950',
+          borderWidth: 1,
+          borderRadius: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: { color: '#8b949e', font: { size: 11 }, boxWidth: 12, boxHeight: 12 },
+        },
+        tooltip: {
+          backgroundColor: '#1c2128',
+          borderColor: '#30363d',
+          borderWidth: 1,
+          titleColor: '#e6edf3',
+          bodyColor: '#8b949e',
+          padding: 10,
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#8b949e', font: { size: 10 }, maxRotation: 45 },
+          grid:  { color: '#21262d' },
+        },
+        y: {
+          ticks: { color: '#8b949e', stepSize: 1, font: { size: 10 } },
+          grid:  { color: '#21262d' },
+          beginAtZero: true,
+        },
+      },
+    },
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Year filter buttons
+// ═══════════════════════════════════════════════════════════════
+function buildYearBtns(rows) {
+  const years = [...new Set(rows.map(r => r.buildYear).filter(y => y && y !== '0'))].sort();
+  const el = document.getElementById('yearBtns');
+  el.innerHTML = ['All', ...years].map(y =>
+    `<button class="yr-btn${y === chartYear ? ' active' : ''}" data-y="${y}">${y}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    if (!e.target.classList.contains('yr-btn')) return;
+    chartYear = e.target.dataset.y;
+    el.querySelectorAll('.yr-btn').forEach(b => b.classList.toggle('active', b.dataset.y === chartYear));
+    buildChart(allRows, chartYear);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Table filters — populate selects
+// ═══════════════════════════════════════════════════════════════
+function populateSelects(rows) {
+  function fill(id, vals) {
+    const el = document.getElementById(id);
+    vals.forEach(v => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      el.appendChild(o);
+    });
+  }
+  const years = [...new Set(rows.map(r => r.buildYear).filter(y => y && y !== '0'))].sort();
+  const states = [...new Set(rows.map(r => r.state).filter(Boolean))].sort();
+  const types  = [...new Set(rows.map(r => r.buildType).filter(Boolean))].sort();
+  fill('fYear', years);
+  fill('fState', states);
+  fill('fBuildType', types);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Filtering + sorting + rendering
+// ═══════════════════════════════════════════════════════════════
+function applyFilters() {
+  const search    = document.getElementById('searchInput').value.toLowerCase();
+  const year      = document.getElementById('fYear').value;
+  const state     = document.getElementById('fState').value;
+  const status    = document.getElementById('fStatus').value;
+  const buildType = document.getElementById('fBuildType').value;
+  const priority  = document.getElementById('fPriority').value;
+
+  filteredRows = allRows.filter(r => {
+    if (search    && !`${r.altName} ${r.city} ${r.state}`.toLowerCase().includes(search)) return false;
+    if (year      && r.buildYear !== year)       return false;
+    if (state     && r.state !== state)          return false;
+    if (status    && r.releaseStatus !== status) return false;
+    if (buildType && r.buildType !== buildType)  return false;
+    if (priority === 'high'   && !isHigh(r))     return false;
+    if (priority === 'normal' && isHigh(r))      return false;
+    return true;
+  });
+
+  sortAndRender();
+}
+
+function sortAndRender() {
+  filteredRows.sort((a, b) => {
+    const av = a[sortCol], bv = b[sortCol];
+    if (av instanceof Date || bv instanceof Date) {
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      return (av - bv) * sortDir;
+    }
+    if (av === null || av === undefined) return 1;
+    if (bv === null || bv === undefined) return -1;
+    return String(av).localeCompare(String(bv), undefined, { numeric: true }) * sortDir;
+  });
+  renderTable();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  document.getElementById('rowCount').textContent = `${filteredRows.length} site${filteredRows.length !== 1 ? 's' : ''}`;
+
+  if (!filteredRows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="no-results">No projects match your filters.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filteredRows.map(r => {
+    const hi = isHigh(r);
+    return `<tr>
+      <td><span class="dot ${hi ? 'high' : 'normal'}"></span>${hi ? 'Highest' : 'Normal'}</td>
+      <td>
+        <div class="site-name">${esc(r.altName)}</div>
+        ${r.batch ? `<div class="site-sub">Batch ${esc(r.batch)}</div>` : ''}
+      </td>
+      <td>${esc(r.state) || '—'}</td>
+      <td>${esc(r.buildYear) || '—'}</td>
+      <td>${esc(r.buildType) || '—'}</td>
+      <td class="dc">${fmtDate(r.forecastDate)}</td>
+      <td class="dc${r.actualDate ? ' actual' : ''}">${fmtDate(r.actualDate)}</td>
+      <td><span class="badge ${r.releaseStatus}">${STATUS_LABEL[r.releaseStatus]}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Sort click handlers
+// ═══════════════════════════════════════════════════════════════
+document.querySelectorAll('thead th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (sortCol === col) { sortDir *= -1; }
+    else { sortCol = col; sortDir = 1; }
+    document.querySelectorAll('thead th').forEach(t => {
+      t.classList.remove('sorted');
+      t.querySelector('.sort-arrow').textContent = '↕';
+    });
+    th.classList.add('sorted');
+    th.querySelector('.sort-arrow').textContent = sortDir === 1 ? '↑' : '↓';
+    sortAndRender();
+  });
+});
+
+// Filter event listeners
+['searchInput','fYear','fState','fStatus','fBuildType','fPriority'].forEach(id =>
+  document.getElementById(id).addEventListener('input', applyFilters)
+);
+
+// ═══════════════════════════════════════════════════════════════
+// Bootstrap
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('headerDate').textContent =
+  'As of ' + TODAY.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+fetch(CSV_FILE)
+  .then(res => {
+    if (!res.ok) throw new Error(`HTTP ${res.status} — could not load ${CSV_FILE}`);
+    return res.text();
+  })
+  .then(text => {
+    const { data } = Papa.parse(text, { skipEmptyLines: true });
+    const dataRows = data.slice(1); // skip header row
+
+    allRows = dataRows
+      .filter(r => r.length > 10)
+      .map(normalize);
+
+    filteredRows = [...allRows];
+
+    buildKPI(allRows);
+    buildMap(allRows);
+    buildYearBtns(allRows);
+    buildChart(allRows, chartYear);
+    populateSelects(allRows);
+    applyFilters();
+  })
+  .catch(err => {
+    const msg = `
+      <div class="error-msg" style="grid-column:1/-1">
+        <strong>⚠ Could not load CSV data:</strong> ${esc(err.message)}<br><br>
+        Make sure <code>MIKHRRallprojectsKP1784902151131.csv</code> is in the same folder as
+        <code>index.html</code> and that you are viewing this page over HTTP (GitHub Pages),
+        not by opening the file directly from your desktop.
+      </div>`;
+    document.getElementById('kpiRow').innerHTML = msg;
+    document.getElementById('tableBody').innerHTML =
+      '<tr><td colspan="8"><div class="error-msg">Data unavailable. See above.</div></td></tr>';
+  });
+</script>
+</body>
+</html>
