@@ -3,273 +3,171 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RELHR Real Estate Release Dashboard</title>
+  <title>Great Lakes Milton HRR Dashboard</title>
   <!--
-    SETUP INSTRUCTIONS FOR GITHUB PAGES
-    ====================================
-    1. Create a GitHub repository (e.g. "relhr-dashboard")
-    2. Upload THIS file as "index.html" to the repository
-    3. Upload "MIKHRRallprojectsKP1784902151131.csv" to the SAME folder
-    4. Go to Settings > Pages > Source: Deploy from main branch
-    5. Your dashboard will be live at https://[username].github.io/[reponame]/
-
-    NOTE: Opening this file directly from your desktop (file://) will NOT work.
-          It must be served over HTTP — GitHub Pages handles this automatically.
+    SETUP
+    =====
+    GitHub Pages: Upload index.html + GreatLakesMiltonHRRTrackingKP*.csv to same folder.
+    Local use   : Click "Scan Downloads" to auto-find the latest tracker CSV, or "Load CSV"
+                  to browse manually. (file:// direct-open will fail due to browser security.)
+    Baseline    : Project Timeline hrr (1).xlsx data is embedded — no separate file needed.
   -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
     :root {
-      --bg:       #0d1117;
-      --card:     #161b22;
-      --border:   #30363d;
-      --text:     #e6edf3;
-      --muted:    #8b949e;
-      --accent:   #cd0000;
-      --green:    #3fb950;
-      --yellow:   #d29922;
-      --red:      #f85149;
+      --bg:      #0d1117;
+      --card:    #161b22;
+      --border:  #30363d;
+      --text:    #e6edf3;
+      --muted:   #8b949e;
+      --accent:  #cd0000;
+      --green:   #3fb950;
+      --yellow:  #d29922;
+      --red:     #f85149;
+      --blue:    #58a6ff;
     }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;font-size:14px;min-height:100vh}
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    /* ── Header ─────────────────────────────────────────────── */
+    header{background:var(--card);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:200;gap:12px;flex-wrap:wrap}
+    .header-left{display:flex;align-items:center;gap:14px}
+    .header-logo{background:var(--accent);color:#fff;font-weight:800;font-size:12px;letter-spacing:.08em;padding:4px 9px;border-radius:4px;white-space:nowrap}
+    .header-title{font-size:1.1rem;font-weight:700}
+    .header-sub{font-size:.76rem;color:var(--muted);margin-top:1px}
+    .header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .header-date{font-size:.78rem;color:var(--muted)}
+    .file-tag{font-size:.7rem;color:var(--green);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-      font-size: 14px;
-      min-height: 100vh;
+    /* ── Action buttons ──────────────────────────────────────── */
+    .btn{background:var(--bg);border:1px solid var(--border);color:var(--muted);padding:5px 12px;border-radius:5px;cursor:pointer;font-size:.76rem;white-space:nowrap;transition:all .12s}
+    .btn:hover{border-color:var(--accent);color:var(--text)}
+    .btn.primary{border-color:var(--accent);color:var(--accent)}
+    .btn-file-label{display:inline-block}
+    .btn-file-label input{display:none}
+
+    /* ── Layout ──────────────────────────────────────────────── */
+    .container{max-width:1720px;margin:0 auto;padding:18px 20px}
+
+    /* ── Sub-market tabs ─────────────────────────────────────── */
+    .sm-tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+    .sm-tab{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:6px 18px;border-radius:6px;cursor:pointer;font-size:.8rem;font-weight:600;transition:all .12s}
+    .sm-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+    .sm-tab:hover:not(.active){border-color:var(--accent);color:var(--text)}
+    .sm-tab-label{font-size:.68rem;display:block;font-weight:400;opacity:.75;margin-top:1px}
+
+    /* ── KPI Cards ───────────────────────────────────────────── */
+    .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+    .kpi-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px 18px}
+    .kpi-card.accent-left{border-left:3px solid var(--accent)}
+    .kpi-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:6px}
+    .kpi-value{font-size:2rem;font-weight:700;line-height:1}
+    .kpi-value.c-white{color:var(--text)}
+    .kpi-value.c-green{color:var(--green)}
+    .kpi-value.c-yellow{color:var(--yellow)}
+    .kpi-value.c-red{color:var(--red)}
+    .kpi-sub{font-size:.72rem;color:var(--muted);margin-top:4px}
+
+    /* ── Panel base ──────────────────────────────────────────── */
+    .panel{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    .panel-header{padding:10px 15px;border-bottom:1px solid var(--border);font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;display:flex;justify-content:space-between;align-items:center}
+    .panel-header .panel-title{color:var(--text)}
+    .chart-inner{padding:14px 16px;position:relative}
+
+    /* ── Main two-panel row ──────────────────────────────────── */
+    .main-row{display:grid;grid-template-columns:1fr 420px;gap:12px;margin-bottom:14px}
+    #map{height:400px}
+    .chart-outer{display:flex;flex-direction:column}
+    #releaseChart{max-height:340px}
+    .year-btns{display:flex;gap:5px;flex-wrap:wrap}
+    .yr-btn{background:var(--bg);border:1px solid var(--border);color:var(--muted);padding:3px 9px;border-radius:4px;cursor:pointer;font-size:.72rem;transition:all .12s}
+    .yr-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+    .yr-btn:hover:not(.active){border-color:var(--accent);color:var(--text)}
+
+    /* ── Pipeline milestone cards ────────────────────────────── */
+    .milestone-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+    .mile-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px 20px}
+    .mile-card-title{font-size:.68rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:10px}
+    .mile-count{font-size:2.4rem;font-weight:700;color:var(--text);line-height:1}
+    .mile-of{font-size:.8rem;color:var(--muted);margin-top:3px}
+    .mile-bar-bg{height:6px;background:var(--border);border-radius:3px;margin-top:10px;overflow:hidden}
+    .mile-bar-fg{height:100%;border-radius:3px;transition:width .4s}
+
+    /* ── Two-chart rows ──────────────────────────────────────── */
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+    .three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px}
+    .full-row{margin-bottom:14px}
+    canvas{display:block;width:100%!important}
+
+    /* ── Table ───────────────────────────────────────────────── */
+    .table-section{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    .table-filters{padding:9px 13px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .fi{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:5px 9px;border-radius:5px;font-size:.8rem;outline:none;transition:border-color .12s}
+    .fi:focus{border-color:var(--accent)}
+    .fi::placeholder{color:var(--muted)}
+    #searchInput{width:220px}
+    select.fi{cursor:pointer}
+    .table-wrap{overflow-x:auto;max-height:450px;overflow-y:auto}
+    table{width:100%;border-collapse:collapse;font-size:.8rem}
+    thead th{background:#0d1117;padding:8px 11px;text-align:left;font-weight:600;color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);position:sticky;top:0;cursor:pointer;user-select:none;white-space:nowrap;z-index:2}
+    thead th:hover{color:var(--text)}
+    thead th.sorted{color:var(--accent)}
+    .sort-arrow{margin-left:4px;opacity:.4;font-size:.68rem}
+    thead th.sorted .sort-arrow{opacity:1}
+    tbody tr{border-bottom:1px solid #21262d;transition:background .1s}
+    tbody tr:hover{background:rgba(255,255,255,.03)}
+    tbody td{padding:8px 11px;vertical-align:middle}
+    .badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+    .badge.released{background:rgba(63,185,80,.12);color:#3fb950;border:1px solid rgba(63,185,80,.3)}
+    .badge.behind{background:rgba(248,81,73,.12);color:#f85149;border:1px solid rgba(248,81,73,.3)}
+    .badge.pending{background:rgba(210,153,34,.12);color:#d29922;border:1px solid rgba(210,153,34,.3)}
+    .badge.no-date{background:rgba(139,148,158,.08);color:var(--muted);border:1px solid var(--border)}
+    .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+    .dot.high{background:var(--accent)}
+    .dot.normal{background:var(--muted);opacity:.4}
+    .dc{white-space:nowrap;font-family:'SFMono-Regular',Consolas,monospace;font-size:.77rem;color:var(--muted)}
+    .dc.actual{color:var(--green)}
+    .site-name{font-weight:600}
+    .site-sub{font-size:.7rem;color:var(--muted);margin-top:1px}
+    #rowCount{font-size:.76rem;color:var(--muted)}
+
+    /* ── Leaflet dark ────────────────────────────────────────── */
+    .leaflet-popup-content-wrapper{background:#1c2128;color:var(--text);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+    .leaflet-popup-tip{background:#1c2128}
+    .leaflet-popup-content{margin:11px 15px}
+    .popup-name{font-weight:700;font-size:.86rem;margin-bottom:6px;border-bottom:1px solid var(--border);padding-bottom:5px}
+    .popup-row{font-size:.76rem;color:var(--muted);margin-bottom:2px}
+    .popup-row b{color:var(--text);font-weight:500}
+    .legend{display:flex;gap:12px;font-size:.74rem}
+    .legend-item{display:flex;align-items:center;gap:4px;color:var(--muted)}
+
+    /* ── Loading/error ───────────────────────────────────────── */
+    .loading{display:flex;align-items:center;justify-content:center;height:120px;color:var(--muted);gap:10px}
+    .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite;flex-shrink:0}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .error-msg{color:var(--red);padding:14px}
+    .no-results{text-align:center;padding:32px;color:var(--muted)}
+    .note-tag{font-size:.68rem;color:var(--muted);font-style:italic;margin-top:6px}
+
+    /* ── Vendor scoresheet legend ────────────────────────────── */
+    .score-legend{display:flex;gap:14px;font-size:.72rem;align-items:center}
+    .score-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:4px}
+
+    /* ── Responsive ──────────────────────────────────────────── */
+    @media(max-width:1200px){
+      .main-row{grid-template-columns:1fr}
+      .three-col{grid-template-columns:1fr 1fr}
+      #map{height:340px}
     }
-
-    /* ── Header ───────────────────────────────────────────────────────── */
-    header {
-      background: var(--card);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      position: sticky;
-      top: 0;
-      z-index: 100;
+    @media(max-width:900px){
+      .two-col,.three-col{grid-template-columns:1fr}
+      .kpi-row{grid-template-columns:1fr 1fr}
+      .milestone-row{grid-template-columns:1fr}
     }
-    .header-left { display: flex; align-items: center; gap: 16px; }
-    .header-logo {
-      background: var(--accent);
-      color: #fff;
-      font-weight: 800;
-      font-size: 13px;
-      letter-spacing: 0.08em;
-      padding: 4px 10px;
-      border-radius: 4px;
-    }
-    .header-title { font-size: 1.15rem; font-weight: 700; }
-    .header-sub   { font-size: 0.78rem; color: var(--muted); margin-top: 1px; }
-    .header-date  { font-size: 0.8rem; color: var(--muted); text-align: right; }
-
-    /* ── Layout ────────────────────────────────────────────────────────── */
-    .container { max-width: 1680px; margin: 0 auto; padding: 20px 24px; }
-
-    /* ── KPI Cards ─────────────────────────────────────────────────────── */
-    .kpi-row {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 14px;
-      margin-bottom: 18px;
-    }
-    .kpi-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 18px 20px;
-    }
-    .kpi-card.accent-left { border-left: 3px solid var(--accent); }
-    .kpi-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin-bottom: 8px; }
-    .kpi-value { font-size: 2.2rem; font-weight: 700; line-height: 1; }
-    .kpi-value.c-white  { color: var(--text); }
-    .kpi-value.c-green  { color: var(--green); }
-    .kpi-value.c-yellow { color: var(--yellow); }
-    .kpi-value.c-red    { color: var(--red); }
-    .kpi-sub { font-size: 0.75rem; color: var(--muted); margin-top: 5px; }
-
-    /* ── Main two-panel row ─────────────────────────────────────────────── */
-    .main-row {
-      display: grid;
-      grid-template-columns: 1fr 440px;
-      gap: 14px;
-      margin-bottom: 18px;
-    }
-
-    .panel {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    .panel-header {
-      padding: 11px 16px;
-      border-bottom: 1px solid var(--border);
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .panel-header .panel-title { color: var(--text); }
-
-    /* Map */
-    #map { height: 430px; }
-
-    /* Chart */
-    .chart-outer { display: flex; flex-direction: column; }
-    .chart-inner { padding: 14px 16px; flex: 1; }
-    #releaseChart { max-height: 370px; }
-
-    /* Year buttons */
-    .year-btns { display: flex; gap: 6px; flex-wrap: wrap; }
-    .yr-btn {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      color: var(--muted);
-      padding: 3px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.75rem;
-      transition: all 0.12s;
-    }
-    .yr-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .yr-btn:hover:not(.active) { border-color: var(--accent); color: var(--text); }
-
-    /* ── Table section ──────────────────────────────────────────────────── */
-    .table-section {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    .table-filters {
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .fi {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 6px 10px;
-      border-radius: 5px;
-      font-size: 0.82rem;
-      outline: none;
-      transition: border-color 0.12s;
-    }
-    .fi:focus { border-color: var(--accent); }
-    .fi::placeholder { color: var(--muted); }
-    #searchInput { width: 240px; }
-    select.fi { cursor: pointer; }
-
-    .table-wrap { overflow-x: auto; max-height: 460px; overflow-y: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-
-    thead th {
-      background: #0d1117;
-      padding: 9px 12px;
-      text-align: left;
-      font-weight: 600;
-      color: var(--muted);
-      font-size: 0.7rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      border-bottom: 1px solid var(--border);
-      position: sticky;
-      top: 0;
-      cursor: pointer;
-      user-select: none;
-      white-space: nowrap;
-      z-index: 2;
-    }
-    thead th:hover { color: var(--text); }
-    thead th.sorted { color: var(--accent); }
-    .sort-arrow { margin-left: 4px; opacity: 0.4; font-size: 0.7rem; }
-    thead th.sorted .sort-arrow { opacity: 1; }
-
-    tbody tr { border-bottom: 1px solid #21262d; transition: background 0.1s; }
-    tbody tr:hover { background: rgba(255,255,255,0.03); }
-    tbody td { padding: 9px 12px; vertical-align: middle; }
-
-    /* Status badge */
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 3px;
-      font-size: 0.68rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      white-space: nowrap;
-    }
-    .badge.released { background: rgba(63,185,80,0.12); color: #3fb950; border: 1px solid rgba(63,185,80,0.3); }
-    .badge.behind   { background: rgba(248,81,73,0.12); color: #f85149; border: 1px solid rgba(248,81,73,0.3); }
-    .badge.pending  { background: rgba(210,153,34,0.12); color: #d29922; border: 1px solid rgba(210,153,34,0.3); }
-    .badge.no-date  { background: rgba(139,148,158,0.08); color: var(--muted); border: 1px solid var(--border); }
-
-    /* Priority */
-    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-    .dot.high   { background: var(--accent); }
-    .dot.normal { background: var(--muted); opacity: 0.5; }
-
-    /* Date cells */
-    .dc { white-space: nowrap; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.79rem; color: var(--muted); }
-    .dc.actual { color: var(--green); }
-
-    .site-name { font-weight: 600; }
-    .site-sub  { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
-
-    #rowCount { font-size: 0.78rem; color: var(--muted); }
-
-    /* Leaflet dark overrides */
-    .leaflet-popup-content-wrapper {
-      background: #1c2128;
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-    }
-    .leaflet-popup-tip { background: #1c2128; }
-    .leaflet-popup-content { margin: 12px 16px; }
-    .popup-name { font-weight: 700; font-size: 0.88rem; margin-bottom: 7px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
-    .popup-row { font-size: 0.78rem; color: var(--muted); margin-bottom: 3px; }
-    .popup-row b { color: var(--text); font-weight: 500; }
-
-    /* Loading / error states */
-    .loading { display: flex; align-items: center; justify-content: center; height: 140px; color: var(--muted); gap: 10px; }
-    .spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.75s linear infinite; flex-shrink: 0; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .error-msg { color: var(--red); padding: 16px; }
-
-    .no-results { text-align: center; padding: 36px; color: var(--muted); }
-
-    /* Legend dots in header */
-    .legend { display: flex; gap: 14px; font-size: 0.76rem; }
-    .legend-item { display: flex; align-items: center; gap: 5px; color: var(--muted); }
-
-    /* Responsive */
-    @media (max-width: 1200px) {
-      .main-row { grid-template-columns: 1fr; }
-      #map { height: 380px; }
-    }
-    @media (max-width: 768px) {
-      .kpi-row { grid-template-columns: 1fr 1fr; }
-      .container { padding: 14px 14px; }
-      #searchInput { width: 180px; }
-    }
-    @media (max-width: 480px) {
-      .kpi-row { grid-template-columns: 1fr; }
-      .header-title { font-size: 1rem; }
+    @media(max-width:600px){
+      .kpi-row{grid-template-columns:1fr}
+      .container{padding:12px}
+      #searchInput{width:160px}
     }
   </style>
 </head>
@@ -279,31 +177,54 @@
   <div class="header-left">
     <div class="header-logo">RELHR</div>
     <div>
-      <div class="header-title">Real Estate Release Dashboard</div>
-      <div class="header-sub">MIK Region — Parker Kenneth Portfolio</div>
+      <div class="header-title">Great Lakes Milton HRR Dashboard</div>
+      <div class="header-sub">Great Lakes Region — Parker Kenneth / Ravitz Joel / Essex Shawn</div>
     </div>
   </div>
-  <div class="header-date" id="headerDate"></div>
+  <div class="header-right">
+    <span class="file-tag" id="fileTag">No data loaded</span>
+    <button class="btn primary" id="btnScan" title="Auto-find latest tracker CSV in Downloads">⟳ Scan Downloads</button>
+    <label class="btn btn-file-label" title="Manually load a CSV file">
+      📂 Load CSV
+      <input type="file" id="fileInput" accept=".csv">
+    </label>
+    <div class="header-date" id="headerDate"></div>
+  </div>
 </header>
 
 <div class="container">
+
+  <!-- Sub-market filter -->
+  <div class="sm-tabs">
+    <button class="sm-tab active" data-sm="all">
+      Great Lakes (All)
+      <span class="sm-tab-label">MIK + ILWI</span>
+    </button>
+    <button class="sm-tab" data-sm="mik">
+      Michigan / Indiana / KY
+      <span class="sm-tab-label">MIK Sub-market</span>
+    </button>
+    <button class="sm-tab" data-sm="ilwi">
+      Illinois / Wisconsin
+      <span class="sm-tab-label">ILWI Sub-market</span>
+    </button>
+  </div>
 
   <!-- KPI Cards -->
   <div class="kpi-row" id="kpiRow">
     <div class="kpi-card"><div class="loading"><div class="spinner"></div>Loading…</div></div>
   </div>
 
-  <!-- Map + Chart -->
+  <!-- Map + Releases by Month -->
   <div class="main-row">
-
     <div class="panel">
       <div class="panel-header">
         <span class="panel-title">Site Locations</span>
         <div class="legend">
-          <span class="legend-item"><span class="dot high" style="background:#3fb950;opacity:1;"></span>Released</span>
-          <span class="legend-item"><span class="dot high" style="background:#d29922;opacity:1;"></span>Pending</span>
-          <span class="legend-item"><span class="dot high" style="background:#f85149;opacity:1;"></span>Behind</span>
-          <span class="legend-item"><span class="dot high" style="background:#8b949e;opacity:1;"></span>No Date</span>
+          <span class="legend-item"><span class="dot" style="background:#3fb950;opacity:1;display:inline-block;width:8px;height:8px;border-radius:50%;"></span>Released</span>
+          <span class="legend-item"><span class="dot" style="background:#d29922;opacity:1;display:inline-block;width:8px;height:8px;border-radius:50%;"></span>Pending</span>
+          <span class="legend-item"><span class="dot" style="background:#f85149;opacity:1;display:inline-block;width:8px;height:8px;border-radius:50%;"></span>Behind</span>
+          <span class="legend-item"><span class="dot" style="background:#8b949e;opacity:1;display:inline-block;width:8px;height:8px;border-radius:50%;"></span>No Date</span>
         </div>
       </div>
       <div id="map"></div>
@@ -311,15 +232,74 @@
 
     <div class="panel chart-outer">
       <div class="panel-header">
-        <span class="panel-title">Releases by Month</span>
+        <span class="panel-title">RE Releases by Month</span>
         <div class="year-btns" id="yearBtns"></div>
       </div>
-      <div class="chart-inner">
-        <canvas id="releaseChart"></canvas>
+      <div class="chart-inner" style="flex:1">
+        <canvas id="releaseChart" style="max-height:330px"></canvas>
       </div>
     </div>
+  </div>
 
-  </div><!-- /.main-row -->
+  <!-- Active Pipeline Milestone Cards -->
+  <div class="milestone-row" id="milestoneCards">
+    <div class="mile-card"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
+  <!-- Build Type Donut + Build Type by Quarter -->
+  <div class="two-col">
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Build Type Distribution</span></div>
+      <div class="chart-inner" style="min-height:260px"><canvas id="buildTypeChart" style="max-height:240px"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Build Type by RE Release (F) — Quarter</span>
+      </div>
+      <div class="chart-inner" style="min-height:260px"><canvas id="quarterChart" style="max-height:240px"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Vendor Scoresheet (full width) -->
+  <div class="full-row panel">
+    <div class="panel-header">
+      <span class="panel-title">Vendor Performance vs Baseline (Avg Days Ahead/Behind)</span>
+      <div class="score-legend">
+        <span><span class="score-dot" style="background:#3fb950"></span>Early / On Time</span>
+        <span><span class="score-dot" style="background:#f85149"></span>Late</span>
+        <span style="color:var(--muted);font-size:.7rem">Baseline: Project Timeline hrr.xlsx</span>
+      </div>
+    </div>
+    <div class="chart-inner" id="vendorWrap" style="min-height:300px">
+      <canvas id="vendorChart"></canvas>
+    </div>
+  </div>
+
+  <!-- RE POC Breakdown + Dismantle by Year -->
+  <div class="two-col">
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Projects by RE POC</span></div>
+      <div class="chart-inner" style="min-height:240px"><canvas id="pocChart" style="max-height:220px"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Dismantle Schedule by Year (Current &amp; Final Term End)</span>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <label style="font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:5px">
+            Avg Annual Rent/Site:
+            <span style="color:var(--green)">$</span>
+            <input type="number" id="avgRent" value="60000" min="0" step="1000"
+              style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px 7px;border-radius:4px;font-size:.76rem;width:100px;outline:none">
+          </label>
+          <button class="btn" id="btnRentUpdate" style="font-size:.7rem;padding:3px 9px">Update</button>
+        </div>
+      </div>
+      <div class="chart-inner" style="min-height:240px">
+        <canvas id="dismantleChart" style="max-height:200px"></canvas>
+        <p class="note-tag">Site counts per year · Hover bars to see estimated rent value · Dollar estimate uses avg above</p>
+      </div>
+    </div>
+  </div>
 
   <!-- Table -->
   <div class="table-section">
@@ -328,9 +308,10 @@
       <span id="rowCount"></span>
     </div>
     <div class="table-filters">
-      <input type="text" id="searchInput" class="fi" placeholder="Search site, city, state…">
-      <select id="fYear"   class="fi"><option value="">All Years</option></select>
-      <select id="fState"  class="fi"><option value="">All States</option></select>
+      <input type="text" id="searchInput" class="fi" placeholder="Search name, vendor, address…">
+      <select id="fYear"   class="fi"><option value="">All Build Yrs</option></select>
+      <select id="fRegion" class="fi"><option value="">All Regions</option></select>
+      <select id="fPOC"    class="fi"><option value="">All POCs</option></select>
       <select id="fStatus" class="fi">
         <option value="">All Statuses</option>
         <option value="released">Released</option>
@@ -341,7 +322,7 @@
       <select id="fBuildType" class="fi"><option value="">All Build Types</option></select>
       <select id="fPriority" class="fi">
         <option value="">All Priorities</option>
-        <option value="high">Highest Priority</option>
+        <option value="por">POR (Plan of Record)</option>
         <option value="normal">Normal</option>
       </select>
     </div>
@@ -349,77 +330,123 @@
       <table>
         <thead>
           <tr>
-            <th data-col="prioritySort">Pri <span class="sort-arrow">↕</span></th>
+            <th data-col="prioritySort">POR <span class="sort-arrow">↕</span></th>
             <th data-col="altName">Site Name <span class="sort-arrow">↕</span></th>
-            <th data-col="state">State <span class="sort-arrow">↕</span></th>
+            <th data-col="poc">RE POC <span class="sort-arrow">↕</span></th>
             <th data-col="buildYear">Build Yr <span class="sort-arrow">↕</span></th>
             <th data-col="buildType">Build Type <span class="sort-arrow">↕</span></th>
+            <th data-col="subMarket">Sub Market <span class="sort-arrow">↕</span></th>
             <th data-col="forecastDate">RE Released (F) <span class="sort-arrow">↕</span></th>
             <th data-col="actualDate">RE Released (A) <span class="sort-arrow">↕</span></th>
             <th data-col="releaseStatus">Status <span class="sort-arrow">↕</span></th>
           </tr>
         </thead>
         <tbody id="tableBody">
-          <tr><td colspan="8"><div class="loading"><div class="spinner"></div>Loading data…</div></td></tr>
+          <tr><td colspan="9"><div class="loading"><div class="spinner"></div>Loading data…</div></td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
-</div><!-- /.container -->
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
-// ═══════════════════════════════════════════════════════════════
-// Config
-// ═══════════════════════════════════════════════════════════════
-const CSV_FILE = './MIKHRRallprojectsKP1784902151131.csv';
+// ═══════════════════════════════════════════════════════
+// Baseline from Project Timeline hrr (1).xlsx
+// Months after Engineering Release date for each milestone
+// ═══════════════════════════════════════════════════════
+const BASELINE = {
+  BTC: { // BTS / Build to Colocate / Raw Land / Co-Development
+    slaLease:   3,
+    enviro:     8,
+    zoning:    10,
+    rcm:       10,
+    allPermits:13,
+    reRelease: 16,
+    rec:       18,
+    construct: 18,
+  },
+  COLO: { // Colocation / Water Tank / Rooftop
+    slaLease:   4,
+    enviro:     6,
+    zoning:     6,
+    rcm:         5,
+    allPermits: 11,
+    reRelease:  12,
+    rec:        14,
+    construct:  15,
+  },
+};
 
+function getBuildCategory(buildType) {
+  const t = (buildType || '').toLowerCase();
+  if (t.includes('coloc') || t.includes('water') || t.includes('roof') || t.includes('co-loc') || t.includes('co loc') || t.includes('co location')) return 'COLO';
+  return 'BTC';
+}
+
+// ═══════════════════════════════════════════════════════
+// Column indices for GreatLakesMiltonHRRTracking CSV
+// ═══════════════════════════════════════════════════════
 const C = {
-  priority:    0,
-  altName:     2,
-  status:      3,
-  reRelF:      6,
-  buildYear:   7,
-  reRelA:      34,
-  buildTypeGL: 42,
-  batchRel:    141,
-  siteName:    184,
-  lat:         187,
-  lng:         188,
-  city:        190,
-  state:       191,
+  projectStatus:  0,  // Active / Completed
+  projectId:      1,  // FUZE Project ID
+  altName:        2,  // Project Name
+  poc:            3,  // Real Estate POC
+  vendor:         4,  // Vendor Site Acquisition Company
+  exhaustProg:    5,  // Exhaust Progress (MIK)
+  buildYear:      6,  // Build Plan Year
+  batchRel:       7,  // Build Plan Year Status (POR)
+  reRelF:         9,  // Real Estate Released (F)
+  engReleased:   11,  // Engineering Released
+  siteName:      16,  // Site Name
+  slaLeaseF:     25,  // SLA Lease Executed (F)
+  slaLeaseA:     26,  // SLA Lease Executed (A)
+  environF:      27,  // Environmental Due Diligence (F)
+  environA:      28,  // Environmental Due Diligence (A)
+  finalCdsA:     30,  // Final CDs Approved (A)
+  zoningF:       31,  // Zoning Approved (F)
+  zoningA:       32,  // Zoning Approved (A)
+  rcmF:          33,  // Regulatory Construction Milestone (F)
+  rcmA:          34,  // Regulatory Construction Milestone (A)
+  allPermitsF:   35,  // All Permits Approved [REC] (F)
+  allPermitsA:   36,  // All Permits Approved [REC] (A)
+  reRelA:        37,  // Real Estate Released (A)
+  recMilestoneA: 39,  // Real Estate Completed (REC) Milestone (A)
+  constructF:    40,  // Construction Started (F)
+  constructA:    41,  // Construction Started (A)
+  address:       42,  // Sarf Address
+  lat:           45,  // Sarf Latitude
+  lng:           46,  // Sarf Longitude
+  buildTypeGL:   47,  // Build Type (GL)
+  buildTypeMIK:  49,  // Project Build Type (MIK)
+  subMarket:     50,  // Site Sub Market
+  siteId:        51,  // Site ID
+  dismantleCurrent: 52, // Dismantle Current Term End
+  dismantleFinal:   53, // Dismantle Final Term End
 };
 
-const STATUS_COLOR = {
-  released: '#3fb950',
-  pending:  '#d29922',
-  behind:   '#f85149',
-  'no-date':'#8b949e',
-};
+const STATUS_COLOR = { released:'#3fb950', pending:'#d29922', behind:'#f85149', 'no-date':'#8b949e' };
+const STATUS_LABEL = { released:'Released', pending:'Pending', behind:'Behind', 'no-date':'No Date' };
+const CHART_COLORS = ['#58a6ff','#3fb950','#d29922','#f85149','#a5d6ff','#e3b341','#ff7b72','#8b949e','#bc8cff','#39d353'];
 
-const STATUS_LABEL = {
-  released: 'Released',
-  pending:  'Pending',
-  behind:   'Behind',
-  'no-date':'No Date',
-};
-
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
 // State
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 let allRows = [], filteredRows = [];
+let activeSubMarket = 'all';
 let sortCol = 'forecastDate', sortDir = 1;
 let chartYear = 'All';
-let leafletMap = null, chartInst = null;
-let mapMarkers = [];
+let leafletMap = null, mapMarkers = [];
+let chartRelease = null, chartBuildType = null, chartQuarter = null;
+let chartVendor = null, chartPOC = null, chartDismantle = null;
 
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
 // Utilities
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
 function parseDate(s) {
   if (!s) return null;
   s = s.trim();
@@ -427,74 +454,90 @@ function parseDate(s) {
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (!m) return null;
   const y = +m[3], mo = +m[1], d = +m[2];
-  if (y < 2020 || y > 2035) return null;
+  if (y < 2018 || y > 2040) return null;
   return new Date(y, mo - 1, d);
 }
 
 function fmtDate(d) {
   if (!d) return '—';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
 }
 
-function monthKey(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function monthLabel(k) {
-  const [y, m] = k.split('-');
-  return new Date(+y, +m - 1, 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-}
+function monthKey(d)    { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function monthLabel(k)  { const [y,m]=k.split('-'); return new Date(+y,+m-1,1).toLocaleDateString('en-US',{month:'short',year:'2-digit'}); }
+function quarterKey(d)  { const q=Math.ceil((d.getMonth()+1)/3); return `Q${q} ${d.getFullYear()}`; }
+function addMonths(d,m) { if(!d) return null; const r=new Date(d); r.setMonth(r.getMonth()+m); return r; }
 
 function getStatus(raw) {
   const actual   = parseDate(raw[C.reRelA]);
   const forecast = parseDate(raw[C.reRelF]);
-  if (actual) return 'released';
+  if (actual)   return 'released';
   if (!forecast) return 'no-date';
   return forecast < TODAY ? 'behind' : 'pending';
 }
 
-function isHigh(r) { return r.raw[C.priority] && r.raw[C.priority].toLowerCase().includes('highest'); }
+function isPOR(r) { return (r.raw[C.batchRel] || '').trim() === 'POR'; }
 
 function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ═══════════════════════════════════════════════════════════════
+function parseVendors(raw) {
+  const v = (raw[C.vendor] || '').trim();
+  return v ? v.split(',').map(s => s.trim()).filter(Boolean) : ['Unknown'];
+}
+
+// ═══════════════════════════════════════════════════════
+// Sub-market filter
+// ═══════════════════════════════════════════════════════
+function matchesSubMarket(r) {
+  if (activeSubMarket === 'all') return true;
+  const sm = (r.subMarket || '').toLowerCase();
+  if (activeSubMarket === 'mik')  return sm.includes('michigan') || sm.includes('indiana') || sm.includes('ky') || sm.includes('kentucky');
+  if (activeSubMarket === 'ilwi') return sm.includes('illinois') || sm.includes('wisconsin');
+  return true;
+}
+
+function smRows() { return allRows.filter(matchesSubMarket); }
+
+// ═══════════════════════════════════════════════════════
 // Normalize row
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
 function normalize(raw) {
-  const forecastDate = parseDate(raw[C.reRelF]);
-  const actualDate   = parseDate(raw[C.reRelA]);
+  const forecastDate  = parseDate(raw[C.reRelF]);
+  const actualDate    = parseDate(raw[C.reRelA]);
   const releaseStatus = getStatus(raw);
   const lat = parseFloat(raw[C.lat]);
   const lng = parseFloat(raw[C.lng]);
+  const subMarket = (raw[C.subMarket] || '').trim();
   return {
     raw,
-    altName:       (raw[C.altName]  || raw[C.siteName] || '(unnamed)').trim(),
-    buildYear:     (raw[C.buildYear] || '').trim(),
-    buildType:     (raw[C.buildTypeGL] || '').trim(),
-    state:         (raw[C.state]    || '').trim(),
-    city:          (raw[C.city]     || '').trim(),
-    batch:         (raw[C.batchRel] || '').trim(),
+    altName:    (raw[C.altName] || raw[C.siteName] || '(unnamed)').trim(),
+    buildYear:  (raw[C.buildYear]  || '').trim(),
+    buildType:  (raw[C.buildTypeGL]|| raw[C.buildTypeMIK] || '').trim(),
+    poc:        (raw[C.poc]        || '').trim(),
+    vendor:     (raw[C.vendor]     || '').trim(),
+    subMarket,
+    address:    (raw[C.address]    || '').trim(),
+    batch:      (raw[C.batchRel]   || '').trim(),
     forecastDate,
     actualDate,
     releaseStatus,
-    prioritySort: isHigh({ raw }) ? 0 : 1,
+    prioritySort: isPOR({raw}) ? 0 : 1,
     lat: isNaN(lat) ? null : lat,
     lng: isNaN(lng) ? null : lng,
   };
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
 // KPI Cards
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
 function buildKPI(rows) {
   const total    = rows.length;
-  const released = rows.filter(r => r.releaseStatus === 'released').length;
-  const behind   = rows.filter(r => r.releaseStatus === 'behind').length;
-  const pending  = rows.filter(r => r.releaseStatus === 'pending').length;
-  const pct      = total ? Math.round((released / total) * 100) : 0;
-
+  const released = rows.filter(r => r.releaseStatus==='released').length;
+  const behind   = rows.filter(r => r.releaseStatus==='behind').length;
+  const pending  = rows.filter(r => r.releaseStatus==='pending').length;
+  const pct      = total ? Math.round((released/total)*100) : 0;
   document.getElementById('kpiRow').innerHTML = `
     <div class="kpi-card accent-left">
       <div class="kpi-label">Total Projects</div>
@@ -515,298 +558,650 @@ function buildKPI(rows) {
       <div class="kpi-label">Behind Schedule</div>
       <div class="kpi-value c-red">${behind}</div>
       <div class="kpi-sub">Forecast date passed</div>
-    </div>
-  `;
+    </div>`;
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
 // Map
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
 function buildMap(rows) {
   if (!leafletMap) {
-    leafletMap = L.map('map', { preferCanvas: true }).setView([42.5, -84.5], 6);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 19,
+    leafletMap = L.map('map',{preferCanvas:true}).setView([43,-87],6);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+      attribution:'&copy; OSM &copy; CARTO',subdomains:'abcd',maxZoom:19
     }).addTo(leafletMap);
   } else {
-    mapMarkers.forEach(m => leafletMap.removeLayer(m));
-    mapMarkers = [];
+    mapMarkers.forEach(m=>leafletMap.removeLayer(m));
+    mapMarkers=[];
   }
-
-  rows.filter(r => r.lat !== null && r.lng !== null).forEach(r => {
+  rows.filter(r=>r.lat!==null&&r.lng!==null).forEach(r=>{
     const color = STATUS_COLOR[r.releaseStatus];
     const icon = L.divIcon({
-      className: '',
-      html: `<div style="width:11px;height:11px;border-radius:50%;background:${color};border:1.5px solid rgba(255,255,255,0.35);box-shadow:0 0 5px ${color}80;"></div>`,
-      iconSize: [11, 11],
-      iconAnchor: [5.5, 5.5],
+      className:'',
+      html:`<div style="width:10px;height:10px;border-radius:50%;background:${color};border:1.5px solid rgba(255,255,255,.35);box-shadow:0 0 5px ${color}80"></div>`,
+      iconSize:[10,10],iconAnchor:[5,5]
     });
-    const pop = `
+    const popup = `
       <div class="popup-name">${esc(r.altName)}</div>
-      <div class="popup-row">Location: <b>${esc(r.city) || '—'}, ${esc(r.state) || '—'}</b></div>
-      <div class="popup-row">Build Type: <b>${esc(r.buildType) || '—'}</b></div>
-      <div class="popup-row">Build Year: <b>${esc(r.buildYear) || '—'}</b></div>
+      <div class="popup-row">Build Type: <b>${esc(r.buildType)||'—'}</b></div>
+      <div class="popup-row">Build Year: <b>${esc(r.buildYear)||'—'}</b></div>
+      <div class="popup-row">Sub Market: <b>${esc(r.subMarket)||'—'}</b></div>
+      <div class="popup-row">RE POC: <b>${esc(r.poc)||'—'}</b></div>
       <div class="popup-row">RE Released (F): <b>${fmtDate(r.forecastDate)}</b></div>
       <div class="popup-row">RE Released (A): <b style="color:${color}">${fmtDate(r.actualDate)}</b></div>
       <div class="popup-row">Status: <b style="color:${color}">${STATUS_LABEL[r.releaseStatus]}</b></div>
-      ${r.batch ? `<div class="popup-row">Batch: <b>${esc(r.batch)}</b></div>` : ''}
-    `;
-    const marker = L.marker([r.lat, r.lng], { icon }).bindPopup(pop, { maxWidth: 240 });
+      ${r.batch?`<div class="popup-row">POR: <b>${esc(r.batch)}</b></div>`:''}`;
+    const marker = L.marker([r.lat,r.lng],{icon}).bindPopup(popup,{maxWidth:230});
     marker.addTo(leafletMap);
     mapMarkers.push(marker);
   });
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Chart
-// ═══════════════════════════════════════════════════════════════
-function buildChart(rows, year) {
-  const subset = year === 'All' ? rows : rows.filter(r => r.buildYear === year);
+// ═══════════════════════════════════════════════════════
+// Releases by Month Chart
+// ═══════════════════════════════════════════════════════
+function buildReleaseChart(rows, year) {
+  const subset = year==='All' ? rows : rows.filter(r=>r.buildYear===year);
+  const fCounts={}, aCounts={};
+  subset.forEach(r=>{
+    if(r.forecastDate){const k=monthKey(r.forecastDate);fCounts[k]=(fCounts[k]||0)+1}
+    if(r.actualDate)  {const k=monthKey(r.actualDate);  aCounts[k]=(aCounts[k]||0)+1}
+  });
+  const keys=[...new Set([...Object.keys(fCounts),...Object.keys(aCounts)])].sort();
+  const labels=keys.map(monthLabel);
+  const fData=keys.map(k=>fCounts[k]||0);
+  const aData=keys.map(k=>aCounts[k]||0);
+  if(chartRelease){
+    chartRelease.data.labels=labels;
+    chartRelease.data.datasets[0].data=fData;
+    chartRelease.data.datasets[1].data=aData;
+    chartRelease.update();return;
+  }
+  const ctx=document.getElementById('releaseChart').getContext('2d');
+  chartRelease=new Chart(ctx,{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'Forecast',data:fData,backgroundColor:'rgba(210,153,34,.65)',borderColor:'#d29922',borderWidth:1,borderRadius:2},
+      {label:'Actual',  data:aData,backgroundColor:'rgba(63,185,80,.65)', borderColor:'#3fb950',borderWidth:1,borderRadius:2},
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{labels:{color:'#8b949e',font:{size:10},boxWidth:10}},
+        tooltip:{backgroundColor:'#1c2128',borderColor:'#30363d',borderWidth:1,titleColor:'#e6edf3',bodyColor:'#8b949e',padding:9}
+      },
+      scales:{
+        x:{ticks:{color:'#8b949e',font:{size:9},maxRotation:45},grid:{color:'#21262d'}},
+        y:{ticks:{color:'#8b949e',stepSize:1,font:{size:9}},grid:{color:'#21262d'},beginAtZero:true}
+      }
+    }
+  });
+}
 
-  const fCounts = {}, aCounts = {};
-  subset.forEach(r => {
-    if (r.forecastDate) { const k = monthKey(r.forecastDate); fCounts[k] = (fCounts[k] || 0) + 1; }
-    if (r.actualDate)   { const k = monthKey(r.actualDate);   aCounts[k] = (aCounts[k] || 0) + 1; }
+function buildYearBtns(rows) {
+  const years=[...new Set(rows.map(r=>r.buildYear).filter(y=>y&&y!=='0'))].sort();
+  const el=document.getElementById('yearBtns');
+  el.innerHTML=['All',...years].map(y=>`<button class="yr-btn${y===chartYear?' active':''}" data-y="${y}">${y}</button>`).join('');
+  el.onclick=e=>{
+    if(!e.target.classList.contains('yr-btn'))return;
+    chartYear=e.target.dataset.y;
+    el.querySelectorAll('.yr-btn').forEach(b=>b.classList.toggle('active',b.dataset.y===chartYear));
+    buildReleaseChart(smRows(),chartYear);
+  };
+}
+
+// ═══════════════════════════════════════════════════════
+// Active Pipeline Milestone Cards
+// ═══════════════════════════════════════════════════════
+function buildMilestoneCards(rows) {
+  // Only unreleased (no reRelA) active projects
+  const unreleased = rows.filter(r => !r.actualDate && r.releaseStatus !== 'released');
+  const total = unreleased.length;
+
+  function countMilestone(col) {
+    return unreleased.filter(r => parseDate(r.raw[col]) !== null).length;
+  }
+
+  const milestones = [
+    { label: 'Regulatory Construction Milestone (A)', col: C.rcmA, color: '#58a6ff' },
+    { label: 'Lease Fully Executed (SLA Lease A)',    col: C.slaLeaseA, color: '#3fb950' },
+    { label: 'Zoning Approved (A)',                   col: C.zoningA,   color: '#d29922' },
+  ];
+
+  document.getElementById('milestoneCards').innerHTML = milestones.map(m => {
+    const n   = countMilestone(m.col);
+    const pct = total ? Math.round((n/total)*100) : 0;
+    return `<div class="mile-card">
+      <div class="mile-card-title">Unreleased Sites With ${m.label}</div>
+      <div class="mile-count" style="color:${m.color}">${n}</div>
+      <div class="mile-of">of ${total} not yet RE Released &nbsp; <b style="color:${m.color}">${pct}%</b></div>
+      <div class="mile-bar-bg"><div class="mile-bar-fg" style="width:${pct}%;background:${m.color}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// Build Type Distribution Donut
+// ═══════════════════════════════════════════════════════
+function buildBuildTypeChart(rows) {
+  const counts={};
+  rows.forEach(r=>{
+    const t=r.buildType||'Unknown';
+    counts[t]=(counts[t]||0)+1;
+  });
+  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const labels=sorted.map(([k])=>k);
+  const data=sorted.map(([,v])=>v);
+  if(chartBuildType){chartBuildType.destroy();chartBuildType=null;}
+  const ctx=document.getElementById('buildTypeChart').getContext('2d');
+  chartBuildType=new Chart(ctx,{
+    type:'doughnut',
+    data:{labels,datasets:[{data,backgroundColor:CHART_COLORS.slice(0,labels.length),borderColor:'#161b22',borderWidth:2}]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'bottom',labels:{color:'#8b949e',font:{size:10},boxWidth:10,padding:6}},
+        tooltip:{backgroundColor:'#1c2128',borderColor:'#30363d',borderWidth:1,titleColor:'#e6edf3',bodyColor:'#8b949e'}
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// Build Type by REC(F) by Quarter
+// ═══════════════════════════════════════════════════════
+function buildQuarterChart(rows) {
+  // Get all unique build type categories (simplified)
+  const typeMap={};
+  rows.forEach(r=>{
+    if(!r.forecastDate)return;
+    const qk=quarterKey(r.forecastDate);
+    const bt=r.buildType||'Unknown';
+    if(!typeMap[qk])typeMap[qk]={};
+    typeMap[qk][bt]=(typeMap[qk][bt]||0)+1;
+  });
+  const quarters=Object.keys(typeMap).sort((a,b)=>{
+    const [qa,ya]=a.split(' '), [qb,yb]=b.split(' ');
+    return ya!==yb ? +ya-+yb : +qa[1]-+qb[1];
+  });
+  const allTypes=[...new Set(rows.map(r=>r.buildType||'Unknown').filter(Boolean))];
+  // Limit to top 6 types by frequency
+  const typeFreq={};
+  rows.forEach(r=>{const t=r.buildType||'Unknown';typeFreq[t]=(typeFreq[t]||0)+1;});
+  const topTypes=Object.entries(typeFreq).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k])=>k);
+
+  const datasets=topTypes.map((bt,i)=>({
+    label:bt,
+    data:quarters.map(q=>(typeMap[q]&&typeMap[q][bt])||0),
+    backgroundColor:CHART_COLORS[i]+'99',
+    borderColor:CHART_COLORS[i],
+    borderWidth:1,borderRadius:2,
+  }));
+
+  if(chartQuarter){chartQuarter.destroy();chartQuarter=null;}
+  const ctx=document.getElementById('quarterChart').getContext('2d');
+  chartQuarter=new Chart(ctx,{
+    type:'bar',
+    data:{labels:quarters,datasets},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{labels:{color:'#8b949e',font:{size:9},boxWidth:9,padding:5}},
+        tooltip:{backgroundColor:'#1c2128',borderColor:'#30363d',borderWidth:1,titleColor:'#e6edf3',bodyColor:'#8b949e'}
+      },
+      scales:{
+        x:{stacked:false,ticks:{color:'#8b949e',font:{size:9},maxRotation:45},grid:{color:'#21262d'}},
+        y:{stacked:false,ticks:{color:'#8b949e',stepSize:1,font:{size:9}},grid:{color:'#21262d'},beginAtZero:true}
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// Vendor Scoresheet (avg days vs baseline)
+// ═══════════════════════════════════════════════════════
+function buildVendorChart(rows) {
+  // Milestones to compare: slaLease, enviro, zoning, reRelease
+  const MILESTONES = [
+    { key:'slaLease',   label:'SLA Lease',    csvCol: C.slaLeaseA  },
+    { key:'enviro',     label:'Environ. DD',  csvCol: C.environA   },
+    { key:'zoning',     label:'Zoning Appr.', csvCol: C.zoningA    },
+    { key:'reRelease',  label:'RE Release',   csvCol: C.reRelA     },
+  ];
+
+  // For each vendor, for each milestone, collect (actual - expected) in days
+  const vendorData={}; // vendorData[vendor][milestoneKey] = [variance, ...]
+
+  rows.forEach(r=>{
+    const engDate = parseDate(r.raw[C.engReleased]);
+    if(!engDate) return;
+    const cat = getBuildCategory(r.buildType);
+    const bline = BASELINE[cat];
+    const vendors = parseVendors(r.raw);
+    vendors.forEach(vendor=>{
+      if(!vendorData[vendor]) vendorData[vendor]={count:0};
+      vendorData[vendor].count++;
+      MILESTONES.forEach(m=>{
+        const actual = parseDate(r.raw[m.csvCol]);
+        if(!actual) return;
+        const expected = addMonths(engDate, bline[m.key]);
+        if(!expected) return;
+        const variance = Math.round((actual - expected) / 86400000); // days
+        if(!vendorData[vendor][m.key]) vendorData[vendor][m.key]=[];
+        vendorData[vendor][m.key].push(variance);
+      });
+    });
   });
 
-  const keys   = [...new Set([...Object.keys(fCounts), ...Object.keys(aCounts)])].sort();
-  const labels = keys.map(monthLabel);
-  const fData  = keys.map(k => fCounts[k] || 0);
-  const aData  = keys.map(k => aCounts[k] || 0);
+  // Pick top vendors by count
+  const topVendors = Object.entries(vendorData)
+    .filter(([,d])=>d.count>=2)
+    .sort((a,b)=>b[1].count-a[1].count)
+    .slice(0,10)
+    .map(([name])=>name);
 
-  if (chartInst) {
-    chartInst.data.labels = labels;
-    chartInst.data.datasets[0].data = fData;
-    chartInst.data.datasets[1].data = aData;
-    chartInst.update();
+  if(!topVendors.length){
+    document.getElementById('vendorWrap').innerHTML=
+      '<p style="color:var(--muted);padding:20px;text-align:center">No vendor data (Engineering Released dates needed for baseline comparison)</p>';
     return;
   }
 
-  const ctx = document.getElementById('releaseChart').getContext('2d');
-  chartInst = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Forecast',
-          data: fData,
-          backgroundColor: 'rgba(210,153,34,0.65)',
-          borderColor: '#d29922',
-          borderWidth: 1,
-          borderRadius: 2,
-        },
-        {
-          label: 'Actual',
-          data: aData,
-          backgroundColor: 'rgba(63,185,80,0.65)',
-          borderColor: '#3fb950',
-          borderWidth: 1,
-          borderRadius: 2,
-        },
-      ],
+  const datasets = MILESTONES.map((m,i)=>({
+    label: m.label,
+    data: topVendors.map(v=>{
+      const arr = vendorData[v][m.key];
+      if(!arr||!arr.length) return null;
+      return Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
+    }),
+    backgroundColor: topVendors.map(v=>{
+      const arr=vendorData[v][m.key];
+      if(!arr||!arr.length) return 'rgba(139,148,158,.3)';
+      const avg=arr.reduce((a,b)=>a+b,0)/arr.length;
+      return avg<=0 ? 'rgba(63,185,80,.7)' : avg<=30 ? 'rgba(210,153,34,.7)' : 'rgba(248,81,73,.7)';
+    }),
+    borderColor: CHART_COLORS[i],
+    borderWidth:1,borderRadius:2,
+    hidden: false,
+  }));
+
+  // Adjust chart height based on vendor count
+  const wrap = document.getElementById('vendorWrap');
+  wrap.style.minHeight = `${topVendors.length * 38 + 60}px`;
+
+  if(chartVendor){chartVendor.destroy();chartVendor=null;}
+  const canvas = wrap.querySelector('canvas') || wrap.appendChild(document.createElement('canvas'));
+  canvas.id='vendorChart';
+  const ctx=canvas.getContext('2d');
+  chartVendor=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:topVendors.map(v=>v.length>35?v.slice(0,32)+'…':v),
+      datasets
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: {
-          labels: { color: '#8b949e', font: { size: 11 }, boxWidth: 12, boxHeight: 12 },
-        },
-        tooltip: {
-          backgroundColor: '#1c2128',
-          borderColor: '#30363d',
-          borderWidth: 1,
-          titleColor: '#e6edf3',
-          bodyColor: '#8b949e',
-          padding: 10,
-        },
+    options:{
+      indexAxis:'y',
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{labels:{color:'#8b949e',font:{size:10},boxWidth:10}},
+        tooltip:{
+          backgroundColor:'#1c2128',borderColor:'#30363d',borderWidth:1,titleColor:'#e6edf3',bodyColor:'#8b949e',
+          callbacks:{
+            label:ctx=>{
+              const v=ctx.parsed.x;
+              if(v===null||v===undefined) return `${ctx.dataset.label}: no data`;
+              const sign=v<0?'':'+'
+              return `${ctx.dataset.label}: ${sign}${v} days vs baseline (${v<0?'early':v===0?'on time':'late'})`;
+            }
+          }
+        }
       },
-      scales: {
-        x: {
-          ticks: { color: '#8b949e', font: { size: 10 }, maxRotation: 45 },
-          grid:  { color: '#21262d' },
+      scales:{
+        x:{
+          ticks:{color:'#8b949e',font:{size:9}},
+          grid:{color:'#21262d'},
+          title:{display:true,text:'Days vs Baseline (negative=early)',color:'#8b949e',font:{size:9}}
         },
-        y: {
-          ticks: { color: '#8b949e', stepSize: 1, font: { size: 10 } },
-          grid:  { color: '#21262d' },
-          beginAtZero: true,
-        },
-      },
-    },
+        y:{ticks:{color:'#8b949e',font:{size:10}},grid:{display:false}}
+      }
+    }
   });
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Year filter buttons
-// ═══════════════════════════════════════════════════════════════
-function buildYearBtns(rows) {
-  const years = [...new Set(rows.map(r => r.buildYear).filter(y => y && y !== '0'))].sort();
-  const el = document.getElementById('yearBtns');
-  el.innerHTML = ['All', ...years].map(y =>
-    `<button class="yr-btn${y === chartYear ? ' active' : ''}" data-y="${y}">${y}</button>`
-  ).join('');
-  el.addEventListener('click', e => {
-    if (!e.target.classList.contains('yr-btn')) return;
-    chartYear = e.target.dataset.y;
-    el.querySelectorAll('.yr-btn').forEach(b => b.classList.toggle('active', b.dataset.y === chartYear));
-    buildChart(allRows, chartYear);
+// ═══════════════════════════════════════════════════════
+// RE POC Breakdown
+// ═══════════════════════════════════════════════════════
+function buildPOCChart(rows) {
+  const pocData={};
+  rows.forEach(r=>{
+    const poc=r.poc||'Unknown';
+    if(!pocData[poc]) pocData[poc]={released:0,pending:0,behind:0,'no-date':0};
+    pocData[poc][r.releaseStatus]++;
+  });
+  const pocs=Object.keys(pocData).sort();
+  const datasets=[
+    {label:'Released',data:pocs.map(p=>pocData[p].released||0),backgroundColor:'rgba(63,185,80,.7)',borderColor:'#3fb950',borderWidth:1},
+    {label:'Pending', data:pocs.map(p=>pocData[p].pending||0), backgroundColor:'rgba(210,153,34,.7)',borderColor:'#d29922',borderWidth:1},
+    {label:'Behind',  data:pocs.map(p=>pocData[p].behind||0),  backgroundColor:'rgba(248,81,73,.7)', borderColor:'#f85149',borderWidth:1},
+    {label:'No Date', data:pocs.map(p=>pocData[p]['no-date']||0),backgroundColor:'rgba(139,148,158,.4)',borderColor:'#8b949e',borderWidth:1},
+  ];
+  if(chartPOC){chartPOC.destroy();chartPOC=null;}
+  const ctx=document.getElementById('pocChart').getContext('2d');
+  chartPOC=new Chart(ctx,{
+    type:'bar',
+    data:{labels:pocs,datasets},
+    options:{
+      indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{labels:{color:'#8b949e',font:{size:10},boxWidth:10}},
+        tooltip:{backgroundColor:'#1c2128',borderColor:'#30363d',borderWidth:1,titleColor:'#e6edf3',bodyColor:'#8b949e'}
+      },
+      scales:{
+        x:{stacked:true,ticks:{color:'#8b949e',stepSize:5,font:{size:9}},grid:{color:'#21262d'}},
+        y:{stacked:true,ticks:{color:'#8b949e',font:{size:10}},grid:{display:false}}
+      }
+    }
   });
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Table filters — populate selects
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// Dismantle by Year
+// ═══════════════════════════════════════════════════════
+function getAvgRent() {
+  return Math.max(0, parseFloat(document.getElementById('avgRent').value) || 0);
+}
+
+function fmtUSD(n) {
+  if (!n) return '—';
+  if (n >= 1e9) return `$${(n/1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `$${(n/1e6).toFixed(2)}M`;
+  if (n >= 1e3) return `$${(n/1e3).toFixed(0)}K`;
+  return `$${n.toFixed(0)}`;
+}
+
+function buildDismantleChart(rows) {
+  const byCurYear={}, byFinalYear={};
+  rows.forEach(r=>{
+    const cur   = parseDate(r.raw[C.dismantleCurrent]);
+    const final = parseDate(r.raw[C.dismantleFinal]);
+    if(cur)  {const y=cur.getFullYear();   if(y>=2024&&y<=2050){byCurYear[y]  =(byCurYear[y]  ||0)+1;}}
+    if(final){const y=final.getFullYear(); if(y>=2024&&y<=2050){byFinalYear[y]=(byFinalYear[y]||0)+1;}}
+  });
+  const years=[...new Set([...Object.keys(byCurYear),...Object.keys(byFinalYear)])].map(Number).sort();
+  const avgRent = getAvgRent();
+
+  if(chartDismantle){chartDismantle.destroy();chartDismantle=null;}
+  const ctx=document.getElementById('dismantleChart').getContext('2d');
+  chartDismantle=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels:years,
+      datasets:[
+        {label:'Current Term End', data:years.map(y=>byCurYear[y]||0), backgroundColor:'rgba(248,81,73,.65)',borderColor:'#f85149',borderWidth:1,borderRadius:2},
+        {label:'Final Term End',   data:years.map(y=>byFinalYear[y]||0),backgroundColor:'rgba(88,166,255,.5)', borderColor:'#58a6ff',borderWidth:1,borderRadius:2},
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{labels:{color:'#8b949e',font:{size:10},boxWidth:10}},
+        tooltip:{
+          backgroundColor:'#1c2128',borderColor:'#30363d',borderWidth:1,
+          titleColor:'#e6edf3',bodyColor:'#8b949e',padding:9,
+          callbacks:{
+            label: c => `${c.dataset.label}: ${c.parsed.y} site${c.parsed.y!==1?'s':''}`,
+            afterBody: items => {
+              const ar = getAvgRent();
+              if (!ar) return [];
+              const total = items.reduce((s,i)=>s+(i.parsed.y||0), 0);
+              return total ? [`Est. Annual Rent: ${fmtUSD(total * ar)}`] : [];
+            }
+          }
+        }
+      },
+      scales:{
+        x:{ticks:{color:'#8b949e',font:{size:9}},grid:{color:'#21262d'}},
+        y:{ticks:{color:'#8b949e',stepSize:2,font:{size:9}},grid:{color:'#21262d'},beginAtZero:true,
+           title:{display:true,text:'# Sites',color:'#8b949e',font:{size:9}}}
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// Populate selects
+// ═══════════════════════════════════════════════════════
 function populateSelects(rows) {
   function fill(id, vals) {
-    const el = document.getElementById(id);
-    vals.forEach(v => {
-      const o = document.createElement('option');
-      o.value = v; o.textContent = v;
-      el.appendChild(o);
-    });
+    const el=document.getElementById(id);
+    // clear old dynamic options
+    while(el.options.length>1) el.remove(1);
+    vals.forEach(v=>{const o=document.createElement('option');o.value=o.textContent=v;el.appendChild(o);});
   }
-  const years = [...new Set(rows.map(r => r.buildYear).filter(y => y && y !== '0'))].sort();
-  const states = [...new Set(rows.map(r => r.state).filter(Boolean))].sort();
-  const types  = [...new Set(rows.map(r => r.buildType).filter(Boolean))].sort();
-  fill('fYear', years);
-  fill('fState', states);
-  fill('fBuildType', types);
+  fill('fYear',   [...new Set(rows.map(r=>r.buildYear).filter(y=>y&&y!=='0'))].sort());
+  fill('fRegion', [...new Set(rows.map(r=>r.subMarket).filter(Boolean))].sort());
+  fill('fPOC',    [...new Set(rows.map(r=>r.poc).filter(Boolean))].sort());
+  fill('fBuildType',[...new Set(rows.map(r=>r.buildType).filter(Boolean))].sort());
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Filtering + sorting + rendering
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// Table filtering, sorting, rendering
+// ═══════════════════════════════════════════════════════
 function applyFilters() {
-  const search    = document.getElementById('searchInput').value.toLowerCase();
-  const year      = document.getElementById('fYear').value;
-  const state     = document.getElementById('fState').value;
-  const status    = document.getElementById('fStatus').value;
-  const buildType = document.getElementById('fBuildType').value;
-  const priority  = document.getElementById('fPriority').value;
+  const search   = document.getElementById('searchInput').value.toLowerCase();
+  const year     = document.getElementById('fYear').value;
+  const region   = document.getElementById('fRegion').value;
+  const poc      = document.getElementById('fPOC').value;
+  const status   = document.getElementById('fStatus').value;
+  const buildType= document.getElementById('fBuildType').value;
+  const priority = document.getElementById('fPriority').value;
 
-  filteredRows = allRows.filter(r => {
-    if (search    && !`${r.altName} ${r.city} ${r.state}`.toLowerCase().includes(search)) return false;
-    if (year      && r.buildYear !== year)       return false;
-    if (state     && r.state !== state)          return false;
-    if (status    && r.releaseStatus !== status) return false;
-    if (buildType && r.buildType !== buildType)  return false;
-    if (priority === 'high'   && !isHigh(r))     return false;
-    if (priority === 'normal' && isHigh(r))      return false;
+  const base = smRows();
+  filteredRows = base.filter(r=>{
+    if(search    && !`${r.altName} ${r.poc} ${r.vendor} ${r.address} ${r.subMarket}`.toLowerCase().includes(search)) return false;
+    if(year      && r.buildYear  !== year)     return false;
+    if(region    && r.subMarket  !== region)   return false;
+    if(poc       && r.poc        !== poc)      return false;
+    if(status    && r.releaseStatus !== status)return false;
+    if(buildType && r.buildType  !== buildType)return false;
+    if(priority==='por'    && !isPOR(r))       return false;
+    if(priority==='normal' && isPOR(r))        return false;
     return true;
   });
-
   sortAndRender();
 }
 
 function sortAndRender() {
-  filteredRows.sort((a, b) => {
-    const av = a[sortCol], bv = b[sortCol];
-    if (av instanceof Date || bv instanceof Date) {
-      if (!av && !bv) return 0;
-      if (!av) return 1;
-      if (!bv) return -1;
-      return (av - bv) * sortDir;
+  filteredRows.sort((a,b)=>{
+    const av=a[sortCol], bv=b[sortCol];
+    if(av instanceof Date||bv instanceof Date){
+      if(!av&&!bv)return 0;
+      if(!av)return 1;
+      if(!bv)return -1;
+      return (av-bv)*sortDir;
     }
-    if (av === null || av === undefined) return 1;
-    if (bv === null || bv === undefined) return -1;
-    return String(av).localeCompare(String(bv), undefined, { numeric: true }) * sortDir;
+    if(av===null||av===undefined) return 1;
+    if(bv===null||bv===undefined) return -1;
+    return String(av).localeCompare(String(bv),undefined,{numeric:true})*sortDir;
   });
   renderTable();
 }
 
 function renderTable() {
-  const tbody = document.getElementById('tableBody');
-  document.getElementById('rowCount').textContent = `${filteredRows.length} site${filteredRows.length !== 1 ? 's' : ''}`;
-
-  if (!filteredRows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="no-results">No projects match your filters.</td></tr>';
+  const tbody=document.getElementById('tableBody');
+  document.getElementById('rowCount').textContent=`${filteredRows.length} site${filteredRows.length!==1?'s':''}`;
+  if(!filteredRows.length){
+    tbody.innerHTML='<tr><td colspan="9" class="no-results">No projects match your filters.</td></tr>';
     return;
   }
-
-  tbody.innerHTML = filteredRows.map(r => {
-    const hi = isHigh(r);
+  tbody.innerHTML=filteredRows.map(r=>{
+    const por=isPOR(r);
     return `<tr>
-      <td><span class="dot ${hi ? 'high' : 'normal'}"></span>${hi ? 'Highest' : 'Normal'}</td>
-      <td>
-        <div class="site-name">${esc(r.altName)}</div>
-        ${r.batch ? `<div class="site-sub">Batch ${esc(r.batch)}</div>` : ''}
-      </td>
-      <td>${esc(r.state) || '—'}</td>
-      <td>${esc(r.buildYear) || '—'}</td>
-      <td>${esc(r.buildType) || '—'}</td>
+      <td><span class="dot ${por?'high':'normal'}"></span>${por?'POR':'—'}</td>
+      <td><div class="site-name">${esc(r.altName)}</div>${r.buildType?`<div class="site-sub">${esc(r.buildType)}</div>`:''}</td>
+      <td>${esc(r.poc)||'—'}</td>
+      <td>${esc(r.buildYear)||'—'}</td>
+      <td>${esc(r.buildType)||'—'}</td>
+      <td style="font-size:.75rem;color:var(--muted)">${esc(r.subMarket)||'—'}</td>
       <td class="dc">${fmtDate(r.forecastDate)}</td>
-      <td class="dc${r.actualDate ? ' actual' : ''}">${fmtDate(r.actualDate)}</td>
+      <td class="dc${r.actualDate?' actual':''}">${fmtDate(r.actualDate)}</td>
       <td><span class="badge ${r.releaseStatus}">${STATUS_LABEL[r.releaseStatus]}</span></td>
     </tr>`;
   }).join('');
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// Full rebuild (called when data or sub-market changes)
+// ═══════════════════════════════════════════════════════
+function rebuildAll() {
+  const rows = smRows();
+  buildKPI(rows);
+  buildMap(rows);
+  buildYearBtns(rows);
+  buildReleaseChart(rows, chartYear);
+  buildMilestoneCards(rows);
+  buildBuildTypeChart(rows);
+  buildQuarterChart(rows);
+  buildVendorChart(rows);
+  buildPOCChart(rows);
+  buildDismantleChart(rows);
+  populateSelects(rows);
+  applyFilters();
+}
+
+// ═══════════════════════════════════════════════════════
+// CSV processing
+// ═══════════════════════════════════════════════════════
+function processCSV(text) {
+  const {data} = Papa.parse(text, {skipEmptyLines:true});
+  const dataRows = data.slice(1);
+  allRows = dataRows.filter(r=>r.length>10).map(normalize);
+  filteredRows = [...allRows];
+  rebuildAll();
+}
+
+// ═══════════════════════════════════════════════════════
 // Sort click handlers
-// ═══════════════════════════════════════════════════════════════
-document.querySelectorAll('thead th[data-col]').forEach(th => {
-  th.addEventListener('click', () => {
-    const col = th.dataset.col;
-    if (sortCol === col) { sortDir *= -1; }
-    else { sortCol = col; sortDir = 1; }
-    document.querySelectorAll('thead th').forEach(t => {
+// ═══════════════════════════════════════════════════════
+document.querySelectorAll('thead th[data-col]').forEach(th=>{
+  th.addEventListener('click',()=>{
+    const col=th.dataset.col;
+    sortCol===col ? sortDir*=-1 : (sortCol=col, sortDir=1);
+    document.querySelectorAll('thead th').forEach(t=>{
       t.classList.remove('sorted');
-      t.querySelector('.sort-arrow').textContent = '↕';
+      t.querySelector('.sort-arrow').textContent='↕';
     });
     th.classList.add('sorted');
-    th.querySelector('.sort-arrow').textContent = sortDir === 1 ? '↑' : '↓';
+    th.querySelector('.sort-arrow').textContent=sortDir===1?'↑':'↓';
     sortAndRender();
   });
 });
 
 // Filter event listeners
-['searchInput','fYear','fState','fStatus','fBuildType','fPriority'].forEach(id =>
+['searchInput','fYear','fRegion','fPOC','fStatus','fBuildType','fPriority'].forEach(id=>
   document.getElementById(id).addEventListener('input', applyFilters)
 );
 
-// ═══════════════════════════════════════════════════════════════
-// Bootstrap
-// ═══════════════════════════════════════════════════════════════
-document.getElementById('headerDate').textContent =
-  'As of ' + TODAY.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+// Rent Update button
+document.getElementById('btnRentUpdate').addEventListener('click', ()=>{
+  buildDismantleChart(smRows());
+});
+document.getElementById('avgRent').addEventListener('keydown', e=>{
+  if(e.key==='Enter') buildDismantleChart(smRows());
+});
 
-fetch(CSV_FILE)
-  .then(res => {
-    if (!res.ok) throw new Error(`HTTP ${res.status} — could not load ${CSV_FILE}`);
+// Sub-market tab listeners
+document.querySelectorAll('.sm-tab').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.sm-tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activeSubMarket = btn.dataset.sm;
+    chartYear = 'All'; // reset year when submarket changes
+    rebuildAll();
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// File loading
+// ═══════════════════════════════════════════════════════
+function setFileTag(name) {
+  document.getElementById('fileTag').textContent = name;
+}
+
+document.getElementById('fileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  setFileTag(file.name);
+  const reader = new FileReader();
+  reader.onload = ev => processCSV(ev.target.result);
+  reader.readAsText(file);
+  e.target.value='';
+});
+
+// ── Scan Downloads for latest HRR Tracking CSV ──────
+document.getElementById('btnScan').addEventListener('click', async()=>{
+  if(!('showDirectoryPicker' in window)){
+    document.getElementById('fileInput').click();
+    return;
+  }
+  try {
+    const dirHandle = await window.showDirectoryPicker({startIn:'downloads',mode:'read'});
+    let bestFile=null, bestKP=-1;
+    for await (const [name, handle] of dirHandle.entries()) {
+      if(handle.kind!=='file') continue;
+      if(!/\.csv$/i.test(name)) continue;
+      const isHRR = /hrrtrack/i.test(name)||/miltonhrr/i.test(name)||/GreatLakesMilton/i.test(name)||/MIKHRRallprojects/i.test(name);
+      if(!isHRR) continue;
+      const m=name.match(/KP(\d+)/i);
+      const kp=m?parseInt(m[1]):0;
+      if(kp>bestKP){bestKP=kp;bestFile=handle;}
+    }
+    if(bestFile){
+      const file = await bestFile.getFile();
+      setFileTag(bestFile.name);
+      processCSV(await file.text());
+    } else {
+      alert('No matching HRR Tracking CSV found.\nTrying file picker instead…');
+      document.getElementById('fileInput').click();
+    }
+  } catch(e) {
+    if(e.name!=='AbortError') document.getElementById('fileInput').click();
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// Bootstrap
+// ═══════════════════════════════════════════════════════
+document.getElementById('headerDate').textContent =
+  'As of ' + TODAY.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+
+// Try default filename first (works on GitHub Pages / HTTP server)
+const DEFAULT_CSV = './GreatLakesMiltonHRRTrackingKP1785346015487.csv';
+fetch(DEFAULT_CSV)
+  .then(res=>{
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.text();
   })
-  .then(text => {
-    const { data } = Papa.parse(text, { skipEmptyLines: true });
-    const dataRows = data.slice(1); // skip header row
-
-    allRows = dataRows
-      .filter(r => r.length > 10)
-      .map(normalize);
-
-    filteredRows = [...allRows];
-
-    buildKPI(allRows);
-    buildMap(allRows);
-    buildYearBtns(allRows);
-    buildChart(allRows, chartYear);
-    populateSelects(allRows);
-    applyFilters();
+  .then(text=>{
+    setFileTag('GreatLakesMiltonHRRTrackingKP1785346015487.csv');
+    processCSV(text);
   })
-  .catch(err => {
-    const msg = `
-      <div class="error-msg" style="grid-column:1/-1">
-        <strong>⚠ Could not load CSV data:</strong> ${esc(err.message)}<br><br>
-        Make sure <code>MIKHRRallprojectsKP1784902151131.csv</code> is in the same folder as
-        <code>index.html</code> and that you are viewing this page over HTTP (GitHub Pages),
-        not by opening the file directly from your desktop.
+  .catch(()=>{
+    // Show prompt UI if file can't be fetched
+    document.getElementById('kpiRow').innerHTML=`
+      <div class="kpi-card" style="grid-column:1/-1;text-align:center;padding:28px">
+        <div style="font-size:1rem;font-weight:600;margin-bottom:8px">Data File Not Loaded</div>
+        <div style="color:var(--muted);font-size:.84rem;margin-bottom:16px">
+          Click <b>Scan Downloads</b> to auto-find the latest CSV, or <b>Load CSV</b> to browse manually.<br>
+          For GitHub Pages, upload <code>GreatLakesMiltonHRRTrackingKP1785346015487.csv</code> alongside this file.
+        </div>
+        <button class="btn primary" onclick="document.getElementById('btnScan').click()">⟳ Scan Downloads</button>
       </div>`;
-    document.getElementById('kpiRow').innerHTML = msg;
-    document.getElementById('tableBody').innerHTML =
-      '<tr><td colspan="8"><div class="error-msg">Data unavailable. See above.</div></td></tr>';
+    document.getElementById('tableBody').innerHTML=
+      '<tr><td colspan="9"><div style="color:var(--muted);padding:24px;text-align:center">No data — use Scan Downloads or Load CSV above.</div></td></tr>';
+    document.getElementById('milestoneCards').innerHTML=
+      '<div class="mile-card"></div><div class="mile-card"></div><div class="mile-card"></div>';
   });
 </script>
 </body>
